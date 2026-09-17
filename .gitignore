@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# pdf.js assets (scripts/copy-pdfjs-assets.mjs 가 생성)
+/public/pdfjs
+
+!.env.example

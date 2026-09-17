@@ -1,26 +1,105 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #f7f7f8;
+  color: #18181b;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  /* 사용법: className="btn btn-primary" */
+  .btn-primary {
+    @apply bg-indigo-600 text-white hover:bg-indigo-700;
+  }
+  .btn-secondary {
+    @apply border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50;
+  }
+  .btn-ghost {
+    @apply text-zinc-600 hover:bg-zinc-100;
+  }
+  .btn-danger {
+    @apply bg-rose-600 text-white hover:bg-rose-700;
+  }
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 disabled:opacity-40;
+  }
+  .input {
+    @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-zinc-700;
+  }
+  .card {
+    @apply rounded-xl border border-zinc-200 bg-white;
+  }
+}
+
+/* AI 답변 / 메모 마크다운 스타일 */
+.markdown {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  word-break: break-word;
+}
+.markdown > * + * {
+  margin-top: 0.6em;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 1em;
+}
+.markdown h1 { font-size: 1.15em; }
+.markdown h2 { font-size: 1.08em; }
+.markdown h3,
+.markdown h4 { font-size: 1em; }
+.markdown ul { list-style: disc; padding-left: 1.3em; }
+.markdown ol { list-style: decimal; padding-left: 1.3em; }
+.markdown li + li { margin-top: 0.2em; }
+.markdown strong { font-weight: 700; }
+.markdown a { color: #4f46e5; text-decoration: underline; }
+.markdown blockquote {
+  border-left: 3px solid #d4d4d8;
+  padding-left: 0.8em;
+  color: #52525b;
+}
+.markdown code {
+  font-size: 0.85em;
+  background: #f4f4f5;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.markdown pre {
+  background: #18181b;
+  color: #f4f4f5;
+  border-radius: 8px;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+}
+.markdown pre code { background: transparent; padding: 0; color: inherit; }
+.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
+.markdown th,
+.markdown td { border: 1px solid #e4e4e7; padding: 0.3em 0.6em; }
+.markdown th { background: #f4f4f5; font-weight: 600; }
+.markdown hr { border-color: #e4e4e7; }
+.markdown .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.2em 0; }
+
+/* PDF 페이지 */
+.pdf-page .react-pdf__Page__canvas {
+  border-radius: 2px;
 }
