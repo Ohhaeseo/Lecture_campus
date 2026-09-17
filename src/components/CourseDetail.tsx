@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, FileText, LoaderCircle, Pencil, Plus, Trash, Upload, X } from "lucide-react";
+import { BookOpen, Check, FileText, LoaderCircle, Pencil, Plus, Trash, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -43,6 +43,7 @@ export function CourseDetail({
   async function uploadFiles(files: FileList | File[]) {
     const supabase = createClient();
     const list = Array.from(files);
+    const uploadedIds: string[] = [];
 
     await Promise.all(
       list.map(async (file) => {
@@ -77,10 +78,17 @@ export function CourseDetail({
           return setError(insertError.message);
         }
 
+        uploadedIds.push(id);
         setUploads((prev) => prev.filter((u) => u.id !== id));
       }),
     );
-    router.refresh();
+
+    // PDF 하나만 올렸다면 바로 뷰어로 열기
+    if (list.length === 1 && uploadedIds.length === 1) {
+      router.push(`/study/${uploadedIds[0]}`);
+    } else {
+      router.refresh();
+    }
   }
 
   async function handleRename(doc: DocumentRow) {
@@ -137,8 +145,13 @@ export function CourseDetail({
 
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-500">강의자료</h2>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-500">강의자료</h2>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                자료를 누르면 PDF를 크게 띄워 스크롤하며 볼 수 있어요.
+              </p>
+            </div>
             <button type="button" className="btn btn-primary" onClick={() => fileInput.current?.click()}>
               <Upload size={15} /> PDF 올리기
             </button>
@@ -212,9 +225,18 @@ export function CourseDetail({
                 {documents.map((doc) => (
                   <li
                     key={doc.id}
-                    className={`group flex items-center gap-3 px-4 py-3 ${busyId === doc.id ? "opacity-50" : ""}`}
+                    className={`group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-indigo-50/40 ${
+                      busyId === doc.id ? "opacity-50" : ""
+                    }`}
                   >
-                    <FileText size={20} className="shrink-0 text-zinc-400" />
+                    <Link
+                      href={`/study/${doc.id}`}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-500"
+                      aria-hidden
+                      tabIndex={-1}
+                    >
+                      <FileText size={20} />
+                    </Link>
                     <div className="min-w-0 flex-1">
                       {renamingId === doc.id ? (
                         <form
@@ -253,27 +275,35 @@ export function CourseDetail({
                       )}
                     </div>
                     {renamingId !== doc.id && (
-                      <div className="flex shrink-0 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          onClick={() => {
-                            setRenameValue(doc.title);
-                            setRenamingId(doc.id);
-                          }}
-                          aria-label="이름 바꾸기"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn hover:text-rose-600"
-                          onClick={() => handleDeleteDocument(doc)}
-                          aria-label="자료 삭제"
-                        >
-                          <Trash size={15} />
-                        </button>
-                      </div>
+                      <>
+                        <div className="flex shrink-0 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => {
+                              setRenameValue(doc.title);
+                              setRenamingId(doc.id);
+                            }}
+                            aria-label="이름 바꾸기"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn hover:text-rose-600"
+                            onClick={() => handleDeleteDocument(doc)}
+                            aria-label="자료 삭제"
+                          >
+                            <Trash size={15} />
+                          </button>
+                        </div>
+                        <Link href={`/study/${doc.id}`} className="btn btn-secondary shrink-0 px-3 py-1.5">
+                          <BookOpen size={15} />
+                          <span className="hidden sm:inline">
+                            {doc.page_count && doc.last_page > 1 ? "이어서 보기" : "열기"}
+                          </span>
+                        </Link>
+                      </>
                     )}
                   </li>
                 ))}

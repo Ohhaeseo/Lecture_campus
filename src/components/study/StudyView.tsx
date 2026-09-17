@@ -1,6 +1,15 @@
 "use client";
 
-import { ArrowLeft, Bookmark, MessageSquare, PanelRightClose, PanelRightOpen, Sparkles, StickyNote } from "lucide-react";
+import {
+  ArrowLeft,
+  Bookmark,
+  MessageSquare,
+  PanelRightClose,
+  PanelRightOpen,
+  Sparkles,
+  StickyNote,
+  X,
+} from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -8,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { extractPageContext } from "@/lib/pdfContext";
 import { createClient } from "@/lib/supabase/client";
 import type { ChatMessage, Course, DocumentRow, Note } from "@/lib/types";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { AiChatPanel } from "./AiChatPanel";
 import { NotesPanel } from "./NotesPanel";
 import type { PdfViewerApi, TextSelection } from "./PdfViewer";
@@ -38,7 +48,10 @@ export function StudyView({ document: doc, course, pdfUrl, initialNotes, initial
 
   const [currentPage, setCurrentPage] = useState(Math.max(1, doc.last_page));
   const [tab, setTab] = useState<"notes" | "ai">("ai");
+  // 넓은 화면: PDF 옆에 패널 고정 / 좁은 화면: PDF 를 꽉 채우고 패널은 필요할 때 위로 띄움
+  const isWide = useMediaQuery("(min-width: 1024px)");
   const [panelOpen, setPanelOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(420);
   const [notes, setNotes] = useState(initialNotes);
   const [noteDraft, setNoteDraft] = useState("");
@@ -136,12 +149,19 @@ export function StudyView({ document: doc, course, pdfUrl, initialNotes, initial
     } else {
       setAiInput(`"${text}"\n\n이 부분이 무슨 뜻인지 설명해줘.`);
     }
-    setTab(target);
-    setPanelOpen(true);
+    openPanel(target);
     setFocusKey((k) => ({ ...k, [target]: k[target] + 1 }));
     setSelection(null);
     window.getSelection()?.removeAllRanges();
   }
+
+  function openPanel(target: "notes" | "ai") {
+    setTab(target);
+    if (isWide) setPanelOpen(true);
+    else setDrawerOpen(true);
+  }
+
+  const showPanel = isWide ? panelOpen : drawerOpen;
 
   function startResize(e: React.PointerEvent) {
     e.preventDefault();
@@ -183,19 +203,33 @@ export function StudyView({ document: doc, course, pdfUrl, initialNotes, initial
           <span className="hidden text-zinc-300 sm:inline">/</span>
           <h1 className="truncate text-sm font-semibold">{doc.title}</h1>
         </div>
-        <button
-          type="button"
-          className="icon-btn hidden md:inline-flex"
-          onClick={() => setPanelOpen((v) => !v)}
-          aria-label={panelOpen ? "오른쪽 패널 닫기" : "오른쪽 패널 열기"}
-          title={panelOpen ? "패널 닫기" : "패널 열기"}
-        >
-          {panelOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
-        </button>
+        {isWide ? (
+          <button
+            type="button"
+            className="btn btn-ghost px-2.5 py-1.5"
+            onClick={() => setPanelOpen((v) => !v)}
+            title={panelOpen ? "메모/AI 패널을 숨기고 PDF를 넓게 봐요" : "메모/AI 패널 열기"}
+          >
+            {panelOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
+            {panelOpen ? "PDF 넓게 보기" : "메모 · AI 열기"}
+          </button>
+        ) : (
+          <div className="flex shrink-0 gap-1">
+            <button type="button" className="btn btn-secondary px-2.5 py-1.5" onClick={() => openPanel("ai")}>
+              <Sparkles size={15} />
+              <span className="hidden sm:inline">AI 질문</span>
+            </button>
+            <button type="button" className="btn btn-secondary px-2.5 py-1.5" onClick={() => openPanel("notes")}>
+              <StickyNote size={15} />
+              <span className="hidden sm:inline">메모</span>
+              {notes.length > 0 && <span className="text-xs text-zinc-400">{notes.length}</span>}
+            </button>
+          </div>
+        )}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <section className="relative min-h-0 min-w-0 flex-1 basis-3/5 md:basis-auto">
+      <div className="relative flex min-h-0 flex-1">
+        <section className="relative min-h-0 min-w-0 flex-1">
           {pdfUrl ? (
             <PdfViewer
               url={pdfUrl}
@@ -235,62 +269,79 @@ export function StudyView({ document: doc, course, pdfUrl, initialNotes, initial
           )}
         </section>
 
-        {panelOpen && (
-          <>
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="패널 너비 조절"
-              onPointerDown={startResize}
-              className="hidden w-1.5 shrink-0 cursor-col-resize bg-zinc-200 transition-colors hover:bg-indigo-400 md:block"
-            />
-            <aside
-              className="flex min-h-0 basis-2/5 flex-col border-t border-zinc-200 md:basis-auto md:border-t-0 md:w-(--panel-w)"
-              style={{ "--panel-w": `${panelWidth}px` } as React.CSSProperties}
-            >
-              <div className="flex shrink-0 border-b border-zinc-200 px-2">
-                <TabButton active={tab === "ai"} onClick={() => setTab("ai")}>
-                  <MessageSquare size={15} /> AI 질문
-                </TabButton>
-                <TabButton active={tab === "notes"} onClick={() => setTab("notes")}>
-                  <StickyNote size={15} /> 메모
-                  {notes.length > 0 && (
-                    <span className="rounded-full bg-zinc-100 px-1.5 text-[11px] text-zinc-500">{notes.length}</span>
-                  )}
-                </TabButton>
-              </div>
-              {/* 탭을 바꿔도 입력 중인 내용이 유지되도록 둘 다 마운트해 둔다 */}
-              <div className={`min-h-0 flex-1 ${tab === "ai" ? "" : "hidden"}`}>
-                <AiChatPanel
-                  documentId={doc.id}
-                  initialMessages={initialMessages}
-                  currentPage={currentPage}
-                  aiEnabled={aiEnabled}
-                  input={aiInput}
-                  onInputChange={setAiInput}
-                  focusKey={focusKey.ai}
-                  getPageContext={getPageContext}
-                  onSaveNote={addNote}
-                  onJump={jumpTo}
-                />
-              </div>
-              <div className={`min-h-0 flex-1 ${tab === "notes" ? "" : "hidden"}`}>
-                <NotesPanel
-                  notes={notes}
-                  currentPage={currentPage}
-                  documentTitle={doc.title}
-                  draft={noteDraft}
-                  onDraftChange={setNoteDraft}
-                  focusKey={focusKey.notes}
-                  onAdd={addNote}
-                  onUpdate={updateNote}
-                  onDelete={deleteNote}
-                  onJump={jumpTo}
-                />
-              </div>
-            </aside>
-          </>
+        {isWide && panelOpen && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="패널 너비 조절"
+            onPointerDown={startResize}
+            className="w-1.5 shrink-0 cursor-col-resize bg-zinc-200 transition-colors hover:bg-indigo-400"
+          />
         )}
+
+        {/* 좁은 화면에서 패널이 떠 있을 때 바깥을 누르면 닫기 */}
+        {!isWide && drawerOpen && (
+          <div className="absolute inset-0 z-20 bg-zinc-900/30" onClick={() => setDrawerOpen(false)} />
+        )}
+
+        {/* 패널을 닫아도 대화/메모 입력 내용이 유지되도록 항상 마운트하고 CSS 로만 숨긴다 */}
+        <aside
+          className={`min-h-0 flex-col bg-white ${showPanel ? "flex" : "hidden"} ${
+            isWide ? "w-(--panel-w) shrink-0" : "absolute inset-y-0 right-0 z-30 w-full shadow-2xl sm:w-[420px]"
+          }`}
+          style={{ "--panel-w": `${panelWidth}px` } as React.CSSProperties}
+        >
+          <div className="flex shrink-0 items-center border-b border-zinc-200 px-2">
+            <TabButton active={tab === "ai"} onClick={() => setTab("ai")}>
+              <MessageSquare size={15} /> AI 질문
+            </TabButton>
+            <TabButton active={tab === "notes"} onClick={() => setTab("notes")}>
+              <StickyNote size={15} /> 메모
+              {notes.length > 0 && (
+                <span className="rounded-full bg-zinc-100 px-1.5 text-[11px] text-zinc-500">{notes.length}</span>
+              )}
+            </TabButton>
+            {!isWide && (
+              <button
+                type="button"
+                className="icon-btn ml-auto"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="패널 닫고 PDF 보기"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+          {/* 탭을 바꿔도 입력 중인 내용이 유지되도록 둘 다 마운트해 둔다 */}
+          <div className={`min-h-0 flex-1 ${tab === "ai" ? "" : "hidden"}`}>
+            <AiChatPanel
+              documentId={doc.id}
+              initialMessages={initialMessages}
+              currentPage={currentPage}
+              aiEnabled={aiEnabled}
+              input={aiInput}
+              onInputChange={setAiInput}
+              focusKey={focusKey.ai}
+              getPageContext={getPageContext}
+              onSaveNote={addNote}
+              onJump={jumpTo}
+            />
+          </div>
+          <div className={`min-h-0 flex-1 ${tab === "notes" ? "" : "hidden"}`}>
+            <NotesPanel
+              notes={notes}
+              currentPage={currentPage}
+              documentTitle={doc.title}
+              draft={noteDraft}
+              onDraftChange={setNoteDraft}
+              focusKey={focusKey.notes}
+              onAdd={addNote}
+              onUpdate={updateNote}
+              onDelete={deleteNote}
+              onJump={jumpTo}
+            />
+          </div>
+        </aside>
       </div>
     </div>
   );
