@@ -75,10 +75,22 @@ export function RecordingList({
           <button type="button" className="btn btn-primary" onClick={() => setRecorderOpen(true)}>
             <Mic size={15} /> 녹음하기
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => fileInput.current?.click()}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => fileInput.current?.click()}
+            title="가지고 있는 오디오 파일 올리기"
+            aria-label="오디오 올리기"
+          >
             <Upload size={15} /> <span className="hidden sm:inline">오디오 올리기</span>
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setTranscriptOpen(true)}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setTranscriptOpen(true)}
+            title="이미 받아쓴 강의 내용을 붙여넣어 요약만 받기"
+            aria-label="전사문 붙여넣기"
+          >
             <ClipboardPaste size={15} /> <span className="hidden sm:inline">붙여넣기</span>
           </button>
           <input

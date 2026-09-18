@@ -15,7 +15,7 @@
 | 저장소 | https://github.com/Ohhaeseo/Lecture_campus (public, 기본 브랜치 `main`) |
 | Supabase | https://supabase.com/dashboard/project/pgegkwvwnuhtskgkjhya (프로젝트 이름 `Lecture_campus`, 무료 플랜) |
 | 배포 | **아직 안 함** (로컬 `npm run dev` 로만 사용 중) |
-| AI 키 | **아직 없음** — `OPENAI_API_KEY`(요약·질문) 와 `DEEPGRAM_API_KEY`(받아쓰기) 둘 다 미설정이라 실제 호출은 못 해봄 |
+| AI 키 | `OPENAI_API_KEY` 설정됨(실제 호출 확인). `DEEPGRAM_API_KEY` 는 **아직 미설정** — 받아쓰기는 미검증 |
 
 ---
 
@@ -30,13 +30,13 @@
 | PDF 업로드 | ✅ | **실제 확인** — 3.4MB PDF 1개가 Storage + `documents` 에 저장됨 |
 | PDF 뷰어 (연속 스크롤, 확대, 페이지 이동, 지연 렌더링) | ✅ | **실제 55쪽 PDF 로 확인** (서명 URL 로 로딩, 페이지 이동, 보이는 페이지만 렌더링) |
 | 메모 (페이지 연결, 수정/삭제, 인용, .md 내보내기) | ✅ | 목업으로 UI 만 확인. **실제 DB 저장은 미확인** |
-| AI 질문 (현재 페이지 / PDF 전체, 스트리밍, 기록 저장) | ✅ | 페이지 이미지(JPEG)+텍스트 추출 → API 호출까지 확인. **OpenAI 실제 응답은 미확인** (키 없음) |
+| AI 질문 (현재 페이지 / PDF 전체, 스트리밍, 기록 저장) | ✅ | **실제 확인(2026-09-18)** — 55쪽 PDF 의 20쪽을 읽고 (p.20) 인용까지 정상 답변 |
 | 텍스트 드래그 → AI 질문 / 메모 인용 | ✅ | 목업으로 확인 |
 | 캘린더 · 일정 · D-day | ✅ | 목업으로 UI 확인. **실제 DB 저장은 미확인** |
 | 대시보드 최근 강의자료 | ✅ | 실제 계정에서 표시 확인 |
-| 강의 녹음 (브라우저 녹음 · 오디오 업로드 · 전사문 붙여넣기) | ✅ | **헤드리스 브라우저 + 가상 마이크로 확인** — 시작/일시정지/재개/중지 후 webm 생성까지. **실제 Supabase 업로드는 미확인** |
-| 받아쓰기 (Deepgram Nova-3) | ✅ | **미확인** — DEEPGRAM_API_KEY 가 없어 실제 호출을 못 해봄 |
-| 녹음 AI 요약 (OpenAI) | ✅ | **미확인** — OPENAI_API_KEY 가 없어 실제 호출을 못 해봄 |
+| 강의 녹음 (브라우저 녹음 · 오디오 업로드 · 전사문 붙여넣기) | ✅ | 녹음은 가상 마이크로 확인(시작/일시정지/재개/중지 → webm). **오디오 업로드 → Storage 저장 → 삭제까지 실제 계정에서 확인(2026-09-18)** |
+| 받아쓰기 (Deepgram Nova-3) | ✅ | **미확인** — DEEPGRAM_API_KEY 가 없어 실제 호출을 못 해봄 (키만 넣으면 됨) |
+| 녹음 AI 요약 (OpenAI) | ✅ | **실제 확인(2026-09-18)** — 전사문 붙여넣기 → 요약(흐름·핵심 개념·시험 포인트) 스트리밍 및 저장 |
 | 넓은 화면 "PDF 넓게 보기" / 좁은 화면 패널 오버레이 | ✅ | 목업 + 헤드리스 Edge 로 1400px / 800px 레이아웃 확인 |
 
 ### 자동화된 검사
@@ -53,7 +53,7 @@
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | 설정됨 | `https://pgegkwvwnuhtskgkjhya.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | 설정됨 | Supabase → Project Settings → API Keys 에서 확인 |
-| `OPENAI_API_KEY` | **미설정** | 넣고 서버 재시작하면 AI 질문·요약이 켜짐 |
+| `OPENAI_API_KEY` | 설정됨 | AI 질문·요약에 사용 (기본 모델 `gpt-5.6-terra`) |
 | `OPENAI_MODEL` | 미설정 | 기본 `gpt-5.6-terra`. 저렴하게는 `gpt-5.6-luna`, 고품질은 `gpt-6-astra` |
 | `DEEPGRAM_API_KEY` | **미설정** | 녹음 받아쓰기용. 가입 시 $200 크레딧(카드 불필요) |
 | `AUTH_EMAIL_DOMAIN` | 미설정 | 기본 `users.localtest.me` — **이미 가입자가 있으니 바꾸면 안 됨** (아래 §6) |
@@ -64,7 +64,7 @@
 - `supabase/schema.sql` 실행 완료 → 테이블 5개(`courses`, `documents`, `notes`, `chat_messages`, `events`), 모두 RLS on, 정책 5개 + Storage 정책 4개, 비공개 버킷 `documents` (파일당 50MB, PDF 만)
 - Authentication → **Confirm email: 꺼짐**
 - Authentication → Email → **Minimum password length: 8**
-- ⚠️ **`recordings` 테이블·버킷 마이그레이션은 아직 적용 안 됨** — `supabase/migrations/2026-09-18-recordings.sql` 을 SQL Editor 에서 실행해야 녹음 기능이 동작합니다
+- 2026-09-18: `supabase/migrations/2026-09-18-recordings.sql` 적용 완료 → `recordings` 테이블 + `recordings` 버킷(비공개, 50MB, 오디오만) + RLS
 - 스키마 SQL 은 `if not exists` / `drop ... if exists` 로 작성돼 **다시 실행해도 데이터는 안 지워짐** (실행 시 대시보드가 "destructive operation" 경고를 띄우지만 정책/트리거 재생성 때문)
 
 ### 로컬 전용 설정
@@ -187,11 +187,11 @@ npx eslint src       # 린트
 
 ## 9. 다음에 할 일 (추천 순서)
 
-1. **키 설정 후 실제 호출 테스트** — `OPENAI_API_KEY`(AI 질문 현재 페이지/PDF 전체, 녹음 요약), `DEEPGRAM_API_KEY`(받아쓰기). 수식·표 렌더링, 중단 버튼, 기록 저장까지 확인
-   - 그리고 **`recordings` 마이그레이션 실행**(§3) — 안 하면 녹음이 저장되지 않음
-2. 실제 계정으로 메모 · 일정 · 수업 수정/삭제 저장 확인 (특히 수업 삭제 시 Storage 파일까지 지워지는지)
-3. Vercel 배포 — 환경변수 등록, Supabase Auth → URL Configuration 의 Site URL 변경, `maxDuration` 이 플랜에서 허용되는지 확인
-4. 기능 로드맵 (README 참고): 강의 녹음 → 받아쓰기, 요약 노트 자동 생성, 퀴즈/플래시카드, 시험 범위 체크리스트, 전체 검색, 형광펜
+1. **`DEEPGRAM_API_KEY` 를 넣고 받아쓰기 실제 테스트** — 유일하게 아직 한 번도 돌려보지 못한 기능. 3시간 녹음이 300초 안에 끝나는지도 같이 확인
+2. 실제 마이크로 긴 녹음(30분 이상) 한 번 — 용량 자동 종료와 업로드가 실제로 잘 되는지
+3. 실제 계정으로 메모 · 일정 · 수업 수정/삭제 저장 확인 (특히 수업 삭제 시 Storage 파일까지 지워지는지)
+4. Vercel 배포 — 환경변수 등록, Supabase Auth → URL Configuration 의 Site URL 변경, `maxDuration` 이 플랜에서 허용되는지 확인
+5. 기능 로드맵 (README 참고): 받아쓴 내용을 슬라이드와 연결, 요약 노트 자동 생성, 퀴즈/플래시카드, 시험 범위 체크리스트, 전체 검색, 형광펜
 
 ### 강의 녹음 → 받아쓰기 → 요약 (2026-09-18 구현 완료)
 
@@ -225,4 +225,6 @@ npx eslint src       # 린트
 | 2026-09-17 | — | 강의 녹음 → 받아쓰기 기능 설계 검토 (코드 변경 없음, §9 참고) |
 | 2026-09-18 | `c0176eb` | 인수인계 문서 작성, "PDF 전체" 모드 용량 한도 수정 (30MB → 22MB) |
 | 2026-09-18 | — | STT 서비스 11곳 비교 조사 → Deepgram 선정 |
-| 2026-09-18 | 이 커밋 | 강의 녹음 · 받아쓰기(Deepgram) · AI 요약 기능 추가, `recordings` 테이블/버킷 |
+| 2026-09-18 | `dbf89b1` | 강의 녹음 · 받아쓰기(Deepgram) · AI 요약 기능 추가, `recordings` 테이블/버킷 |
+| 2026-09-18 | `736342e` | AI 제공자를 Claude → OpenAI Responses API 로 교체 |
+| 2026-09-18 | 이 커밋 | recordings 마이그레이션 적용, OpenAI 연동 실제 동작 확인, 버튼 설명 보완 |
