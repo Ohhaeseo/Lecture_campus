@@ -1,12 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
 import {
-  ANTHROPIC_MODEL,
-  describeAnthropicError,
-  fallbackOptions,
+  createAiClient,
+  describeAiError,
   jsonError,
   ndjsonChunk,
   NDJSON_HEADERS,
-} from "@/lib/anthropic";
+  OPENAI_MODEL,
+  truncatedNote,
+} from "@/lib/ai";
 import { formatDuration } from "@/lib/recordings";
 import { createClient } from "@/lib/supabase/server";
 import type { Recording, TranscriptSegment } from "@/lib/types";
@@ -15,14 +15,15 @@ export const maxDuration = 300;
 
 // 3시간 강의 받아쓰기도 여유 있게 들어가는 길이 (대략 30만 자)
 const MAX_TRANSCRIPT_CHARS = 300_000;
+const MAX_OUTPUT_TOKENS = 32000;
 
 type RecordingRow = Pick<Recording, "id" | "title" | "transcript" | "segments"> & {
   course: { name: string } | null;
 };
 
 export async function POST(request: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return jsonError(500, "서버에 ANTHROPIC_API_KEY 가 설정되지 않았어요.");
+  if (!process.env.OPENAI_API_KEY) {
+    return jsonError(500, "서버에 OPENAI_API_KEY 가 설정되지 않았어요.");
   }
 
   const supabase = await createClient();
@@ -40,19 +41,21 @@ export async function POST(request: Request) {
   if (!recording) return jsonError(404, "녹음을 찾을 수 없어요.");
   if (!recording.transcript?.trim()) return jsonError(400, "먼저 받아쓰기를 끝내야 요약할 수 있어요.");
 
-  const client = new Anthropic();
-  const stream = client.beta.messages.stream(
+  const client = createAiClient();
+  const stream = client.responses.stream(
     {
-      model: ANTHROPIC_MODEL,
-      max_tokens: 32000,
-      system: SYSTEM_PROMPT,
-      messages: [
+      model: OPENAI_MODEL,
+      instructions: SYSTEM_PROMPT,
+      input: [
         {
           role: "user",
           content: `수업: ${recording.course?.name ?? "(알 수 없음)"}\n녹음 제목: ${recording.title}\n\n<transcript>\n${buildTranscript(recording)}\n</transcript>\n\n위 강의 녹음을 정리해 주세요.`,
         },
       ],
-      ...fallbackOptions(),
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+      reasoning: { effort: "medium" },
+      // 한 번 쓰고 마는 긴 입력이라 캐시에 쓰지 않도록 (캐시 쓰기 요금 방지)
+      prompt_cache_options: { mode: "explicit" },
     },
     { signal: request.signal },
   );
@@ -62,19 +65,15 @@ export async function POST(request: Request) {
       const send = (event: object) => controller.enqueue(ndjsonChunk(event));
       let summary = "";
 
-      stream.on("text", (delta) => {
-        summary += delta;
-        send({ type: "text", text: delta });
+      stream.on("response.output_text.delta", (event) => {
+        summary += event.delta;
+        send({ type: "text", text: event.delta });
       });
 
       try {
-        const final = await stream.finalMessage();
-        if (final.stop_reason === "refusal") {
-          const note = "\n\n_(이 내용은 요약할 수 없었어요.)_";
-          summary += note;
-          send({ type: "text", text: note });
-        } else if (final.stop_reason === "max_tokens") {
-          const note = "\n\n_(요약이 너무 길어 중간에 끊겼어요.)_";
+        const final = await stream.finalResponse();
+        const note = truncatedNote(final);
+        if (note) {
           summary += note;
           send({ type: "text", text: note });
         }
@@ -92,7 +91,7 @@ export async function POST(request: Request) {
           }
         } else {
           console.error("[recordings/summarize]", err);
-          send({ type: "error", message: describeAnthropicError(err) });
+          send({ type: "error", message: describeAiError(err) });
         }
       } finally {
         try {

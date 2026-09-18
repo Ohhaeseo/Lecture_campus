@@ -1,12 +1,13 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type OpenAI from "openai";
 import {
-  ANTHROPIC_MODEL,
-  describeAnthropicError,
-  fallbackOptions,
+  createAiClient,
+  describeAiError,
   jsonError,
   ndjsonChunk,
   NDJSON_HEADERS,
-} from "@/lib/anthropic";
+  OPENAI_MODEL,
+  truncatedNote,
+} from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
 import { DOCUMENTS_BUCKET } from "@/lib/supabase/env";
 
@@ -14,9 +15,9 @@ import { DOCUMENTS_BUCKET } from "@/lib/supabase/env";
 export const maxDuration = 300;
 
 const MAX_HISTORY = 20;
-// base64 로 바꾸면 용량이 약 1.33배가 되므로, 22MB 까지만 허용해야 API 요청 한도(32MB) 안에 들어간다
-const MAX_PDF_BYTES = 22 * 1024 * 1024;
-const MAX_PDF_PAGES = 600;
+// base64 로 바꾸면 용량이 약 1.33배가 되므로, OpenAI 파일 한도(50MB) 안에 들어가도록 제한
+const MAX_PDF_BYTES = 25 * 1024 * 1024;
+const MAX_OUTPUT_TOKENS = 32000;
 
 type ChatRequest = {
   documentId: string;
@@ -37,8 +38,8 @@ type DocumentWithCourse = {
 };
 
 export async function POST(request: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return jsonError(500, "서버에 ANTHROPIC_API_KEY 가 설정되지 않았어요.");
+  if (!process.env.OPENAI_API_KEY) {
+    return jsonError(500, "서버에 OPENAI_API_KEY 가 설정되지 않았어요.");
   }
 
   const supabase = await createClient();
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
     .order("created_at", { ascending: false })
     .limit(MAX_HISTORY);
 
-  const messages: Anthropic.Beta.BetaMessageParam[] = [];
+  const input: OpenAI.Responses.ResponseInput = [];
 
   if (body.scope === "document") {
     if ((doc.file_size ?? 0) > MAX_PDF_BYTES) {
@@ -76,36 +77,32 @@ export async function POST(request: Request) {
         `PDF가 ${Math.round(MAX_PDF_BYTES / 1024 / 1024)}MB보다 커서 'PDF 전체' 모드를 쓸 수 없어요. '현재 페이지' 모드를 사용해 주세요.`,
       );
     }
-    if ((doc.page_count ?? 0) > MAX_PDF_PAGES) {
-      return jsonError(400, `${MAX_PDF_PAGES}쪽이 넘는 PDF는 'PDF 전체' 모드를 쓸 수 없어요.`);
-    }
     const { data: file, error } = await supabase.storage.from(DOCUMENTS_BUCKET).download(doc.storage_path);
     if (error || !file) return jsonError(500, "PDF 파일을 불러오지 못했어요.");
     const data = Buffer.from(await file.arrayBuffer()).toString("base64");
 
-    // PDF 는 대화 맨 앞에 두고 캐시해서, 같은 자료로 이어서 질문할 때 비용과 시간을 줄인다
-    messages.push({
+    // PDF 는 대화 맨 앞에 둔다 (같은 앞부분이 반복되면 자동 프롬프트 캐싱이 걸림)
+    input.push({
       role: "user",
       content: [
         {
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data },
-          title: doc.title,
-          cache_control: { type: "ephemeral" },
+          type: "input_file",
+          filename: `${doc.title}.pdf`,
+          file_data: `data:application/pdf;base64,${data}`,
         },
-        { type: "text", text: "위 PDF는 이 수업의 강의자료 전체입니다." },
+        { type: "input_text", text: "위 PDF는 이 수업의 강의자료 전체입니다." },
       ],
     });
   }
 
-  // 이전 대화 (API 는 user 로 시작해야 하고, 연속된 같은 역할 메시지는 자동으로 합쳐짐)
+  // 이전 대화 (오래된 것부터). 첫 메시지가 assistant 로 시작하지 않도록 정리
   const history = (historyRows ?? []).reverse().filter((m) => m.content);
-  while (history.length && history[0].role !== "user" && messages.length === 0) history.shift();
+  while (history.length && history[0].role !== "user" && input.length === 0) history.shift();
   for (const row of history) {
-    messages.push({ role: row.role as "user" | "assistant", content: row.content });
+    input.push({ role: row.role as "user" | "assistant", content: row.content });
   }
 
-  messages.push({ role: "user", content: buildQuestion(body) });
+  input.push({ role: "user", content: buildQuestion(body) });
 
   await supabase.from("chat_messages").insert({
     document_id: doc.id,
@@ -114,14 +111,15 @@ export async function POST(request: Request) {
     page: body.page,
   });
 
-  const client = new Anthropic();
-  const stream = client.beta.messages.stream(
+  const client = createAiClient();
+  const stream = client.responses.stream(
     {
-      model: ANTHROPIC_MODEL,
-      max_tokens: 64000,
-      system: buildSystemPrompt(doc),
-      messages,
-      ...fallbackOptions(),
+      model: OPENAI_MODEL,
+      instructions: buildSystemPrompt(doc),
+      input,
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+      // 대화형이라 응답이 빨리 시작되는 편이 좋음
+      reasoning: { effort: "low" },
     },
     { signal: request.signal },
   );
@@ -131,19 +129,15 @@ export async function POST(request: Request) {
       const send = (event: object) => controller.enqueue(ndjsonChunk(event));
       let answer = "";
 
-      stream.on("text", (delta) => {
-        answer += delta;
-        send({ type: "text", text: delta });
+      stream.on("response.output_text.delta", (event) => {
+        answer += event.delta;
+        send({ type: "text", text: event.delta });
       });
 
       try {
-        const final = await stream.finalMessage();
-        if (final.stop_reason === "refusal") {
-          const note = "\n\n_(이 질문에는 답변할 수 없어요. 질문을 바꿔서 다시 시도해 주세요.)_";
-          answer += note;
-          send({ type: "text", text: note });
-        } else if (final.stop_reason === "max_tokens") {
-          const note = "\n\n_(답변이 너무 길어 중간에 끊겼어요.)_";
+        const final = await stream.finalResponse();
+        const note = truncatedNote(final);
+        if (note) {
           answer += note;
           send({ type: "text", text: note });
         }
@@ -155,7 +149,7 @@ export async function POST(request: Request) {
           if (answer) await saveAnswer(`${answer}\n\n_(답변을 중단했어요)_`);
         } else {
           console.error("[ai/chat]", err);
-          send({ type: "error", message: describeAnthropicError(err) });
+          send({ type: "error", message: describeAiError(err) });
         }
       } finally {
         try {
@@ -183,7 +177,6 @@ export async function POST(request: Request) {
 }
 
 function buildSystemPrompt(doc: DocumentWithCourse) {
-  // 자료별로 고정된 내용만 넣어 프롬프트 캐시가 유지되게 한다 (현재 페이지 번호 등은 질문에 포함)
   return `당신은 대학생이 강의자료를 공부하도록 돕는 튜터입니다.
 - 수업: ${doc.course?.name ?? "(알 수 없음)"}
 - 강의자료: ${doc.title}
@@ -198,25 +191,26 @@ function buildSystemPrompt(doc: DocumentWithCourse) {
 - 마크다운(목록, 표, 굵게)을 활용하되, 질문의 크기에 맞게 간결하게 답하세요.`;
 }
 
-function buildQuestion(body: ChatRequest): Anthropic.Beta.BetaContentBlockParam[] {
-  const blocks: Anthropic.Beta.BetaContentBlockParam[] = [];
+function buildQuestion(body: ChatRequest): OpenAI.Responses.ResponseInputContent[] {
+  const blocks: OpenAI.Responses.ResponseInputContent[] = [];
 
   if (body.scope === "page") {
     if (body.pageImage) {
       blocks.push({
-        type: "image",
-        source: { type: "base64", media_type: "image/jpeg", data: body.pageImage },
+        type: "input_image",
+        image_url: `data:image/jpeg;base64,${body.pageImage}`,
+        detail: "auto",
       });
     }
     const text = body.pageText?.trim() || "(이 페이지에서 추출된 텍스트가 없습니다. 이미지를 참고하세요.)";
     blocks.push({
-      type: "text",
+      type: "input_text",
       text: `<page number="${body.page}">\n<extracted_text>\n${text}\n</extracted_text>\n</page>`,
     });
   }
 
   blocks.push({
-    type: "text",
+    type: "input_text",
     text: `학생이 지금 보고 있는 페이지: ${body.page}쪽\n\n질문: ${body.message}`,
   });
   return blocks;

@@ -162,7 +162,7 @@ export function RecordingDetail({
           className="btn btn-primary"
           onClick={summarize}
           disabled={summarizing || !hasTranscript || !aiEnabled}
-          title={aiEnabled ? undefined : "ANTHROPIC_API_KEY 가 설정되지 않았어요"}
+          title={aiEnabled ? undefined : "OPENAI_API_KEY 가 설정되지 않았어요"}
         >
           {summarizing ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />}
           {summarizing ? "요약하는 중..." : summary ? "요약 다시 만들기" : "AI 요약 만들기"}

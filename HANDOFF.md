@@ -10,12 +10,12 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 무엇 | 강의자료 PDF를 보면서 페이지별 메모 + AI(Claude) 질문 + 시험 일정 관리를 하는 웹앱 |
-| 스택 | Next.js 16.3 (App Router, Turbopack) · React 19 · TypeScript · Tailwind CSS 4 · Supabase · react-pdf 11 (pdf.js 6) · `@anthropic-ai/sdk` |
+| 무엇 | 강의자료 PDF를 보면서 페이지별 메모 + AI 질문 + 강의 녹음/받아쓰기/요약 + 시험 일정 관리를 하는 웹앱 |
+| 스택 | Next.js 16.3 (App Router, Turbopack) · React 19 · TypeScript · Tailwind CSS 4 · Supabase · react-pdf 11 (pdf.js 6) · `openai` (Responses API) · Deepgram |
 | 저장소 | https://github.com/Ohhaeseo/Lecture_campus (public, 기본 브랜치 `main`) |
 | Supabase | https://supabase.com/dashboard/project/pgegkwvwnuhtskgkjhya (프로젝트 이름 `Lecture_campus`, 무료 플랜) |
 | 배포 | **아직 안 함** (로컬 `npm run dev` 로만 사용 중) |
-| AI 키 | **아직 없음** — `ANTHROPIC_API_KEY` 미설정이라 AI 답변은 실제로 받아본 적 없음 |
+| AI 키 | **아직 없음** — `OPENAI_API_KEY`(요약·질문) 와 `DEEPGRAM_API_KEY`(받아쓰기) 둘 다 미설정이라 실제 호출은 못 해봄 |
 
 ---
 
@@ -30,13 +30,13 @@
 | PDF 업로드 | ✅ | **실제 확인** — 3.4MB PDF 1개가 Storage + `documents` 에 저장됨 |
 | PDF 뷰어 (연속 스크롤, 확대, 페이지 이동, 지연 렌더링) | ✅ | **실제 55쪽 PDF 로 확인** (서명 URL 로 로딩, 페이지 이동, 보이는 페이지만 렌더링) |
 | 메모 (페이지 연결, 수정/삭제, 인용, .md 내보내기) | ✅ | 목업으로 UI 만 확인. **실제 DB 저장은 미확인** |
-| AI 질문 (현재 페이지 / PDF 전체, 스트리밍, 기록 저장) | ✅ | 페이지 이미지(JPEG)+텍스트 추출 → API 호출까지 확인. **Claude 실제 응답은 미확인** (키 없음) |
+| AI 질문 (현재 페이지 / PDF 전체, 스트리밍, 기록 저장) | ✅ | 페이지 이미지(JPEG)+텍스트 추출 → API 호출까지 확인. **OpenAI 실제 응답은 미확인** (키 없음) |
 | 텍스트 드래그 → AI 질문 / 메모 인용 | ✅ | 목업으로 확인 |
 | 캘린더 · 일정 · D-day | ✅ | 목업으로 UI 확인. **실제 DB 저장은 미확인** |
 | 대시보드 최근 강의자료 | ✅ | 실제 계정에서 표시 확인 |
 | 강의 녹음 (브라우저 녹음 · 오디오 업로드 · 전사문 붙여넣기) | ✅ | **헤드리스 브라우저 + 가상 마이크로 확인** — 시작/일시정지/재개/중지 후 webm 생성까지. **실제 Supabase 업로드는 미확인** |
 | 받아쓰기 (Deepgram Nova-3) | ✅ | **미확인** — DEEPGRAM_API_KEY 가 없어 실제 호출을 못 해봄 |
-| 녹음 AI 요약 (Claude) | ✅ | **미확인** — ANTHROPIC_API_KEY 가 없어 실제 호출을 못 해봄 |
+| 녹음 AI 요약 (OpenAI) | ✅ | **미확인** — OPENAI_API_KEY 가 없어 실제 호출을 못 해봄 |
 | 넓은 화면 "PDF 넓게 보기" / 좁은 화면 패널 오버레이 | ✅ | 목업 + 헤드리스 Edge 로 1400px / 800px 레이아웃 확인 |
 
 ### 자동화된 검사
@@ -53,8 +53,8 @@
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | 설정됨 | `https://pgegkwvwnuhtskgkjhya.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | 설정됨 | Supabase → Project Settings → API Keys 에서 확인 |
-| `ANTHROPIC_API_KEY` | **미설정** | 주석 처리돼 있음. 넣고 서버 재시작하면 AI 활성화 |
-| `ANTHROPIC_MODEL` | 미설정 | 기본 `claude-opus-5`. 비용 절감 시 `claude-sonnet-5` |
+| `OPENAI_API_KEY` | **미설정** | 넣고 서버 재시작하면 AI 질문·요약이 켜짐 |
+| `OPENAI_MODEL` | 미설정 | 기본 `gpt-5.6-terra`. 저렴하게는 `gpt-5.6-luna`, 고품질은 `gpt-6-astra` |
 | `DEEPGRAM_API_KEY` | **미설정** | 녹음 받아쓰기용. 가입 시 $200 크레딧(카드 불필요) |
 | `AUTH_EMAIL_DOMAIN` | 미설정 | 기본 `users.localtest.me` — **이미 가입자가 있으니 바꾸면 안 됨** (아래 §6) |
 
@@ -64,6 +64,7 @@
 - `supabase/schema.sql` 실행 완료 → 테이블 5개(`courses`, `documents`, `notes`, `chat_messages`, `events`), 모두 RLS on, 정책 5개 + Storage 정책 4개, 비공개 버킷 `documents` (파일당 50MB, PDF 만)
 - Authentication → **Confirm email: 꺼짐**
 - Authentication → Email → **Minimum password length: 8**
+- ⚠️ **`recordings` 테이블·버킷 마이그레이션은 아직 적용 안 됨** — `supabase/migrations/2026-09-18-recordings.sql` 을 SQL Editor 에서 실행해야 녹음 기능이 동작합니다
 - 스키마 SQL 은 `if not exists` / `drop ... if exists` 로 작성돼 **다시 실행해도 데이터는 안 지워짐** (실행 시 대시보드가 "destructive operation" 경고를 띄우지만 정책/트리거 재생성 때문)
 
 ### 로컬 전용 설정
@@ -94,10 +95,10 @@ npx eslint src       # 린트
 | `/courses/[courseId]` | `src/app/(main)/courses/[courseId]/page.tsx` → `components/CourseDetail.tsx` | 자료 업로드/목록, 수업 일정 |
 | `/calendar` | `src/app/(main)/calendar/page.tsx` → `components/CalendarView.tsx` | 월간 캘린더 |
 | `/study/[documentId]` | `src/app/study/[documentId]/page.tsx` → `components/study/StudyView.tsx` | PDF 뷰어 + AI/메모 패널 (사이드바 없는 전체 화면) |
-| `POST /api/ai/chat` | `src/app/api/ai/chat/route.ts` | Claude 스트리밍 (NDJSON 응답) |
+| `POST /api/ai/chat` | `src/app/api/ai/chat/route.ts` | OpenAI Responses 스트리밍 (NDJSON 응답) |
 | `/recordings/[id]` | `src/app/(main)/recordings/[recordingId]/page.tsx` → `components/recordings/RecordingDetail.tsx` | 녹음 재생 · 받아쓰기 · AI 요약 |
 | `POST /api/recordings/transcribe` | `src/app/api/recordings/transcribe/route.ts` | Deepgram 호출 (동기, 결과를 DB 에 저장) |
-| `POST /api/recordings/summarize` | `src/app/api/recordings/summarize/route.ts` | 받아쓰기 → Claude 요약 (NDJSON 스트리밍) |
+| `POST /api/recordings/summarize` | `src/app/api/recordings/summarize/route.ts` | 받아쓰기 → OpenAI 요약 (NDJSON 스트리밍) |
 
 `(main)/layout.tsx` 가 로그인 확인 후 사이드바(`AppShell`)를 감쌉니다.
 
@@ -121,16 +122,17 @@ npx eslint src       # 린트
 
 ### AI 흐름 (`api/ai/chat/route.ts`)
 - **현재 페이지 모드**: 브라우저가 pdf.js 로 현재 페이지를 JPEG(긴 변 1568px) + 텍스트로 추출해 전송 (`lib/pdfContext.ts`). 렌더링이 8초 넘으면 텍스트만 보냄
-- **PDF 전체 모드**: 서버가 Storage 에서 PDF 를 받아 base64 `document` 블록으로 전송, `cache_control` 로 캐싱
+- **PDF 전체 모드**: 서버가 Storage 에서 PDF 를 받아 base64 `input_file` 블록으로 전송 (OpenAI 파일 한도 50MB 때문에 원본 25MB 까지만 허용)
 - 이전 대화 최근 20개를 함께 보냄 (텍스트만, 이전 페이지 이미지는 안 보냄)
 - 질문은 호출 전에, 답변은 스트림 종료 후 `chat_messages` 에 저장. 사용자가 중단하면 받은 부분까지 저장
-- 모델이 `claude-opus-5` / `claude-fable-5-1` 일 때만 `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) 사용 — 안전 거절 시 서버가 다른 모델로 재시도. **다른 모델로 바꾸면 이 옵션은 자동으로 빠짐**
+- **OpenAI Responses API** 를 씁니다(`client.responses.stream`). 시스템 프롬프트는 `instructions`, 이미지·PDF 는 `input_image` / `input_file` 블록. 답변이 잘렸는지는 `status === "incomplete"` 로 판단
+- 공통 코드는 `src/lib/ai.ts` (모델 상수, 에러 메시지, NDJSON 헬퍼). 재시도는 꺼 둠(스트리밍 중 재시도가 걸리면 답이 중복됨)
 
 ### 녹음 · 받아쓰기 · 요약 흐름
 - 녹음: 브라우저 MediaRecorder(모노 32kbps) → Blob → **브라우저에서 Storage 로 직접 업로드** → `recordings` insert. 화면 잠금 방지(wake lock)와 50MB 도달 시 자동 종료가 들어 있음
 - 받아쓰기: 서버가 6시간짜리 서명 URL 을 만들어 **Deepgram 에 URL 만 전달**(오디오를 서버로 내려받지 않음) → 결과를 `transcript` / `segments` 에 저장
   - **웹훅이 아니라 동기 호출**입니다. 로컬 개발에서 웹훅을 받을 수 없어 단순한 쪽을 택했고, 요청 타임아웃은 240초입니다
-- 요약: `segments` 가 있으면 [시:분:초] 를 붙여 Claude 에 보내고, 스트리밍으로 받아 `summary` 에 저장
+- 요약: `segments` 가 있으면 [시:분:초] 를 붙여 OpenAI 에 보내고, 스트리밍으로 받아 `summary` 에 저장. 긴 입력을 캐시에 쓰지 않도록 `prompt_cache_options: { mode: "explicit" }` 사용
 
 ---
 
@@ -147,7 +149,7 @@ npx eslint src       # 린트
 5. **Storage 파일은 DB cascade 로 안 지워집니다.** 수업/자료 삭제는 `lib/courses.ts` 에서 Storage 를 먼저 지우고 DB 를 지웁니다. 대시보드에서 사용자나 수업을 직접 지우면 **Storage 에 고아 파일이 남습니다.**
 6. **시간대**: 서버는 UTC, 사용자는 KST. D-day/오늘 날짜는 `lib/useToday.ts`(브라우저 기준)로 계산하고, 서버 쿼리는 하루 여유를 둡니다. 새로 날짜 로직을 추가할 때 서버에서 `new Date()` 로 오늘을 판단하지 마세요.
 7. **Supabase 무료 플랜은 1주일 동안 접속이 없으면 일시정지**됩니다. "연결이 안 돼요" 하면 대시보드에서 Restore 부터 확인.
-8. **AI 비용**: 기본 모델이 Opus 라 비쌉니다. "PDF 전체" 모드는 첫 질문에 PDF 전체 토큰이 과금됩니다(5분 내 재질문은 캐시로 저렴). 3시간 녹음 요약도 한 번에 수만 토큰이 들어갑니다.
+8. **AI 비용**: 기본 모델은 `gpt-5.6-terra`(입력 $2 / 출력 $12 per 1M 토큰)입니다. "PDF 전체" 모드는 첫 질문에 PDF 전체 토큰이 과금됩니다(5분 내 재질문은 캐시로 저렴). 3시간 녹음 요약도 한 번에 수만 토큰이 들어갑니다.
 9. **녹음 용량**: 3시간이면 약 43MB 로 Supabase 무료 한도(50MB/파일, 전체 1GB)에 가깝습니다. 녹음은 약 3시간 30분에서 자동 종료되고, 파일이 쌓이면 1GB 를 금방 채웁니다. 받아쓰기가 끝난 원본을 지우는 기능은 아직 없습니다.
 10. **모바일 녹음**: iOS 는 화면이 꺼지거나 다른 앱으로 전환되면 녹음이 멈출 수 있습니다. Safari 18.4 미만은 webm 대신 mp4(AAC)로 녹음되며, 두 형식 모두 Deepgram 이 처리합니다.
 
@@ -185,7 +187,8 @@ npx eslint src       # 린트
 
 ## 9. 다음에 할 일 (추천 순서)
 
-1. **`ANTHROPIC_API_KEY` 설정 후 AI 질문 실제 테스트** — 현재 페이지 / PDF 전체 모드 둘 다, 수식·표 렌더링, 중단 버튼, 대화 기록 저장
+1. **키 설정 후 실제 호출 테스트** — `OPENAI_API_KEY`(AI 질문 현재 페이지/PDF 전체, 녹음 요약), `DEEPGRAM_API_KEY`(받아쓰기). 수식·표 렌더링, 중단 버튼, 기록 저장까지 확인
+   - 그리고 **`recordings` 마이그레이션 실행**(§3) — 안 하면 녹음이 저장되지 않음
 2. 실제 계정으로 메모 · 일정 · 수업 수정/삭제 저장 확인 (특히 수업 삭제 시 Storage 파일까지 지워지는지)
 3. Vercel 배포 — 환경변수 등록, Supabase Auth → URL Configuration 의 Site URL 변경, `maxDuration` 이 플랜에서 허용되는지 확인
 4. 기능 로드맵 (README 참고): 강의 녹음 → 받아쓰기, 요약 노트 자동 생성, 퀴즈/플래시카드, 시험 범위 체크리스트, 전체 검색, 형광펜

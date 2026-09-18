@@ -14,7 +14,7 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
 <br />
 ![Supabase](https://img.shields.io/badge/Supabase-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white)
-![Claude](https://img.shields.io/badge/Claude_API-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=for-the-badge&logo=openai&logoColor=white)
 ![PDF.js](https://img.shields.io/badge/PDF.js-E44D26?style=for-the-badge&logo=mozilla&logoColor=white)
 
 <br />
@@ -133,7 +133,7 @@
 | **Backend** | Next.js Route Handler · Server Actions · Proxy |
 | **Database / Auth / Storage** | Supabase (Postgres + RLS, Auth, Storage) |
 | **PDF** | react-pdf (PDF.js) |
-| **AI** | Claude API (`@anthropic-ai/sdk`), 스트리밍 응답 · 프롬프트 캐싱 |
+| **AI** | OpenAI Responses API (`openai`), 스트리밍 응답 · 프롬프트 캐싱 |
 | **받아쓰기** | Deepgram Nova-3 (한국어, 서명 URL 전달 방식) |
 | **Markdown** | react-markdown, remark-gfm, remark-math, rehype-katex |
 
@@ -163,8 +163,8 @@ cp .env.example .env.local
 | --- | :---: | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ✅ | Supabase Publishable key (또는 anon key) |
-| `ANTHROPIC_API_KEY` | AI 사용 시 | [Anthropic Console](https://console.anthropic.com) 에서 발급 |
-| `ANTHROPIC_MODEL` | | 기본 `claude-opus-5`. 비용을 줄이려면 `claude-sonnet-5` |
+| `OPENAI_API_KEY` | AI 사용 시 | [OpenAI Platform](https://platform.openai.com/api-keys) 에서 발급 |
+| `OPENAI_MODEL` | | 기본 `gpt-5.6-terra`. 저렴하게는 `gpt-5.6-luna`, 고품질은 `gpt-6-astra` |
 | `DEEPGRAM_API_KEY` | 받아쓰기 시 | [Deepgram Console](https://console.deepgram.com) 에서 발급 (가입 시 $200 크레딧, 카드 등록 불필요) |
 | `AUTH_EMAIL_DOMAIN` | | 아이디를 내부 이메일로 바꿀 때 쓰는 도메인 (기본 `users.localtest.me`) |
 
@@ -200,8 +200,8 @@ npm run dev
     │   ├── (main)/calendar        # 월간 캘린더
     │   ├── (main)/recordings/[id] # 🎙️ 녹음 상세 (받아쓰기 · AI 요약)
     │   ├── study/[documentId]     # 📄 PDF 뷰어 + 🤖 AI · 📝 메모 패널
-    │   ├── api/ai/chat            # Claude API 스트리밍
-    │   └── api/recordings/*       # 받아쓰기(Deepgram) · 요약(Claude)
+    │   ├── api/ai/chat            # OpenAI 스트리밍 응답
+    │   └── api/recordings/*       # 받아쓰기(Deepgram) · 요약(OpenAI)
     ├── 📂 components              # UI 컴포넌트 (study/ = 학습 화면)
     └── 📂 lib                     # Supabase 클라이언트 · 타입 · 유틸
 ```
@@ -280,7 +280,7 @@ sequenceDiagram
     participant B as 브라우저
     participant S as Next.js 서버
     participant DB as Supabase
-    participant C as Claude API
+    participant C as OpenAI API
 
     U->>B: 이 부분 설명해줘
     opt 현재 페이지 모드

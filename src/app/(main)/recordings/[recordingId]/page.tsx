@@ -36,7 +36,7 @@ export default async function RecordingPage({ params }: PageProps<"/recordings/[
       course={course}
       audioUrl={signed?.signedUrl ?? null}
       transcribeEnabled={Boolean(process.env.DEEPGRAM_API_KEY)}
-      aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
+      aiEnabled={Boolean(process.env.OPENAI_API_KEY)}
     />
   );
 }

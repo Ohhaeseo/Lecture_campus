@@ -209,7 +209,7 @@ export function AiChatPanel({
       >
         {!aiEnabled && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-            AI 기능을 쓰려면 .env.local 에 ANTHROPIC_API_KEY 를 설정하고 서버를 다시 시작하세요.
+            AI 기능을 쓰려면 .env.local 에 OPENAI_API_KEY 를 설정하고 서버를 다시 시작하세요.
           </p>
         )}
 

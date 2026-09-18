@@ -1,4 +1,4 @@
-import { jsonError } from "@/lib/anthropic";
+import { jsonError } from "@/lib/ai";
 import { RECORDINGS_BUCKET } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import type { Recording, TranscriptSegment } from "@/lib/types";

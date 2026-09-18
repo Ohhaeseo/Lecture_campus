@@ -10,7 +10,7 @@ export function SetupNotice() {
         <pre className="mt-4 overflow-x-auto rounded-lg bg-zinc-900 p-4 text-xs leading-6 text-zinc-100">
           {`NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-ANTHROPIC_API_KEY=sk-ant-...`}
+OPENAI_API_KEY=sk-...`}
         </pre>
       </div>
     </main>

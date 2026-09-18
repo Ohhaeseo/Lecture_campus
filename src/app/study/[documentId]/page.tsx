@@ -49,7 +49,7 @@ export default async function StudyPage({ params }: PageProps<"/study/[documentI
       pdfUrl={signed?.signedUrl ?? null}
       initialNotes={notes ?? []}
       initialMessages={(messages ?? []).reverse()}
-      aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
+      aiEnabled={Boolean(process.env.OPENAI_API_KEY)}
     />
   );
 }
