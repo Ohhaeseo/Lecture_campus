@@ -10,7 +10,8 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 const MODELS_WITH_DEFAULT_FALLBACK = new Set(["claude-opus-5", "claude-fable-5-1"]);
 
 const MAX_HISTORY = 20;
-const MAX_PDF_BYTES = 30 * 1024 * 1024; // API 요청 한도(32MB) 안에 base64 로 들어가도록
+// base64 로 바꾸면 용량이 약 1.33배가 되므로, 22MB 까지만 허용해야 API 요청 한도(32MB) 안에 들어간다
+const MAX_PDF_BYTES = 22 * 1024 * 1024;
 const MAX_PDF_PAGES = 600;
 
 type ChatRequest = {
@@ -66,7 +67,10 @@ export async function POST(request: Request) {
 
   if (body.scope === "document") {
     if ((doc.file_size ?? 0) > MAX_PDF_BYTES) {
-      return jsonError(400, "PDF가 30MB보다 커서 'PDF 전체' 모드를 쓸 수 없어요. '현재 페이지' 모드를 사용해 주세요.");
+      return jsonError(
+        400,
+        `PDF가 ${Math.round(MAX_PDF_BYTES / 1024 / 1024)}MB보다 커서 'PDF 전체' 모드를 쓸 수 없어요. '현재 페이지' 모드를 사용해 주세요.`,
+      );
     }
     if ((doc.page_count ?? 0) > MAX_PDF_PAGES) {
       return jsonError(400, `${MAX_PDF_PAGES}쪽이 넘는 PDF는 'PDF 전체' 모드를 쓸 수 없어요.`);
