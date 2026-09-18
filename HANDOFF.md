@@ -1,6 +1,6 @@
 # 인수인계 문서 — 강의노트 (Lecture Campus)
 
-> 최종 업데이트: 2026-09-18 · 기준 브랜치: `main`
+> 최종 업데이트: 2026-09-18 (녹음·받아쓰기·요약 추가) · 기준 브랜치: `main`
 >
 > 사용법과 기능 소개는 [README.md](README.md) 에 있고, 이 문서는 **이어서 개발할 사람**을 위한 현재 상태 · 설계 이유 · 주의사항 · 남은 일을 정리합니다.
 
@@ -34,6 +34,9 @@
 | 텍스트 드래그 → AI 질문 / 메모 인용 | ✅ | 목업으로 확인 |
 | 캘린더 · 일정 · D-day | ✅ | 목업으로 UI 확인. **실제 DB 저장은 미확인** |
 | 대시보드 최근 강의자료 | ✅ | 실제 계정에서 표시 확인 |
+| 강의 녹음 (브라우저 녹음 · 오디오 업로드 · 전사문 붙여넣기) | ✅ | **헤드리스 브라우저 + 가상 마이크로 확인** — 시작/일시정지/재개/중지 후 webm 생성까지. **실제 Supabase 업로드는 미확인** |
+| 받아쓰기 (Deepgram Nova-3) | ✅ | **미확인** — DEEPGRAM_API_KEY 가 없어 실제 호출을 못 해봄 |
+| 녹음 AI 요약 (Claude) | ✅ | **미확인** — ANTHROPIC_API_KEY 가 없어 실제 호출을 못 해봄 |
 | 넓은 화면 "PDF 넓게 보기" / 좁은 화면 패널 오버레이 | ✅ | 목업 + 헤드리스 Edge 로 1400px / 800px 레이아웃 확인 |
 
 ### 자동화된 검사
@@ -52,6 +55,7 @@
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | 설정됨 | Supabase → Project Settings → API Keys 에서 확인 |
 | `ANTHROPIC_API_KEY` | **미설정** | 주석 처리돼 있음. 넣고 서버 재시작하면 AI 활성화 |
 | `ANTHROPIC_MODEL` | 미설정 | 기본 `claude-opus-5`. 비용 절감 시 `claude-sonnet-5` |
+| `DEEPGRAM_API_KEY` | **미설정** | 녹음 받아쓰기용. 가입 시 $200 크레딧(카드 불필요) |
 | `AUTH_EMAIL_DOMAIN` | 미설정 | 기본 `users.localtest.me` — **이미 가입자가 있으니 바꾸면 안 됨** (아래 §6) |
 
 새 PC 에서는 `.env.example` 을 복사해서 채우면 됩니다.
@@ -91,6 +95,9 @@ npx eslint src       # 린트
 | `/calendar` | `src/app/(main)/calendar/page.tsx` → `components/CalendarView.tsx` | 월간 캘린더 |
 | `/study/[documentId]` | `src/app/study/[documentId]/page.tsx` → `components/study/StudyView.tsx` | PDF 뷰어 + AI/메모 패널 (사이드바 없는 전체 화면) |
 | `POST /api/ai/chat` | `src/app/api/ai/chat/route.ts` | Claude 스트리밍 (NDJSON 응답) |
+| `/recordings/[id]` | `src/app/(main)/recordings/[recordingId]/page.tsx` → `components/recordings/RecordingDetail.tsx` | 녹음 재생 · 받아쓰기 · AI 요약 |
+| `POST /api/recordings/transcribe` | `src/app/api/recordings/transcribe/route.ts` | Deepgram 호출 (동기, 결과를 DB 에 저장) |
+| `POST /api/recordings/summarize` | `src/app/api/recordings/summarize/route.ts` | 받아쓰기 → Claude 요약 (NDJSON 스트리밍) |
 
 `(main)/layout.tsx` 가 로그인 확인 후 사이드바(`AppShell`)를 감쌉니다.
 
@@ -119,6 +126,12 @@ npx eslint src       # 린트
 - 질문은 호출 전에, 답변은 스트림 종료 후 `chat_messages` 에 저장. 사용자가 중단하면 받은 부분까지 저장
 - 모델이 `claude-opus-5` / `claude-fable-5-1` 일 때만 `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) 사용 — 안전 거절 시 서버가 다른 모델로 재시도. **다른 모델로 바꾸면 이 옵션은 자동으로 빠짐**
 
+### 녹음 · 받아쓰기 · 요약 흐름
+- 녹음: 브라우저 MediaRecorder(모노 32kbps) → Blob → **브라우저에서 Storage 로 직접 업로드** → `recordings` insert. 화면 잠금 방지(wake lock)와 50MB 도달 시 자동 종료가 들어 있음
+- 받아쓰기: 서버가 6시간짜리 서명 URL 을 만들어 **Deepgram 에 URL 만 전달**(오디오를 서버로 내려받지 않음) → 결과를 `transcript` / `segments` 에 저장
+  - **웹훅이 아니라 동기 호출**입니다. 로컬 개발에서 웹훅을 받을 수 없어 단순한 쪽을 택했고, 요청 타임아웃은 240초입니다
+- 요약: `segments` 가 있으면 [시:분:초] 를 붙여 Claude 에 보내고, 스트리밍으로 받아 `summary` 에 저장
+
 ---
 
 ## 6. 꼭 알아야 할 주의사항
@@ -134,7 +147,9 @@ npx eslint src       # 린트
 5. **Storage 파일은 DB cascade 로 안 지워집니다.** 수업/자료 삭제는 `lib/courses.ts` 에서 Storage 를 먼저 지우고 DB 를 지웁니다. 대시보드에서 사용자나 수업을 직접 지우면 **Storage 에 고아 파일이 남습니다.**
 6. **시간대**: 서버는 UTC, 사용자는 KST. D-day/오늘 날짜는 `lib/useToday.ts`(브라우저 기준)로 계산하고, 서버 쿼리는 하루 여유를 둡니다. 새로 날짜 로직을 추가할 때 서버에서 `new Date()` 로 오늘을 판단하지 마세요.
 7. **Supabase 무료 플랜은 1주일 동안 접속이 없으면 일시정지**됩니다. "연결이 안 돼요" 하면 대시보드에서 Restore 부터 확인.
-8. **AI 비용**: 기본 모델이 Opus 라 비쌉니다. "PDF 전체" 모드는 첫 질문에 PDF 전체 토큰이 과금됩니다(5분 내 재질문은 캐시로 저렴).
+8. **AI 비용**: 기본 모델이 Opus 라 비쌉니다. "PDF 전체" 모드는 첫 질문에 PDF 전체 토큰이 과금됩니다(5분 내 재질문은 캐시로 저렴). 3시간 녹음 요약도 한 번에 수만 토큰이 들어갑니다.
+9. **녹음 용량**: 3시간이면 약 43MB 로 Supabase 무료 한도(50MB/파일, 전체 1GB)에 가깝습니다. 녹음은 약 3시간 30분에서 자동 종료되고, 파일이 쌓이면 1GB 를 금방 채웁니다. 받아쓰기가 끝난 원본을 지우는 기능은 아직 없습니다.
+10. **모바일 녹음**: iOS 는 화면이 꺼지거나 다른 앱으로 전환되면 녹음이 멈출 수 있습니다. Safari 18.4 미만은 webm 대신 mp4(AAC)로 녹음되며, 두 형식 모두 Deepgram 이 처리합니다.
 
 ---
 
@@ -146,6 +161,9 @@ npx eslint src       # 린트
 | 🟠 | DB 타입을 손으로 작성 (`lib/types.ts`). 스키마를 바꾸면 수동으로 맞춰야 함 → `supabase gen types` 도입 권장 | `src/lib/types.ts` |
 | 🟡 | 자료 삭제 시 Storage 삭제 성공 후 DB 삭제가 실패하면 파일 없는 행이 남음 (트랜잭션 아님) | `src/lib/courses.ts` |
 | 🟡 | "PDF 전체" 모드는 22MB 까지만 허용 (base64 변환 시 약 1.33배 → API 요청 한도 32MB). 업로드 한도(50MB)와 달라서, 큰 PDF 는 "현재 페이지" 모드만 가능 | `src/app/api/ai/chat/route.ts` `MAX_PDF_BYTES` |
+| 🟠 | 받아쓰기가 **동기 호출**이라 Vercel Hobby(300초) 에서는 아주 긴 녹음이 타임아웃될 수 있음 → 배포 후 문제가 되면 Deepgram callback + 서비스 롤 키 방식으로 전환 | `api/recordings/transcribe/route.ts` |
+| 🟡 | 받아쓰기 중 창을 닫으면 상태가 `transcribing` 으로 남음 (다시 누르면 재시도됨) | 같은 파일 |
+| 🟡 | 녹음 원본 자동 삭제·보관 정책 없음 (1GB 무료 용량을 계속 차지) | — |
 | 🟡 | 뷰어가 열 때 전체 페이지 비율을 한 번에 계산 → 수백 쪽 PDF 는 첫 표시가 느릴 수 있음 | `src/components/study/PdfViewer.tsx` `handleLoad` |
 | 🟡 | 서명 URL 6시간 만료. 페이지를 6시간 넘게 열어두면 아직 안 불러온 부분 로딩이 실패할 수 있음 (새로고침으로 해결) | `src/app/study/[documentId]/page.tsx` |
 | 🟡 | 현재 페이지 모드의 이전 대화에는 그때 보던 페이지 이미지가 포함되지 않음 (답변 텍스트로만 맥락 유지) | `route.ts` |
@@ -172,16 +190,26 @@ npx eslint src       # 린트
 3. Vercel 배포 — 환경변수 등록, Supabase Auth → URL Configuration 의 Site URL 변경, `maxDuration` 이 플랜에서 허용되는지 확인
 4. 기능 로드맵 (README 참고): 강의 녹음 → 받아쓰기, 요약 노트 자동 생성, 퀴즈/플래시카드, 시험 범위 체크리스트, 전체 검색, 형광펜
 
-### 강의 녹음 → 받아쓰기 기능 (검토만 끝난 상태)
+### 강의 녹음 → 받아쓰기 → 요약 (2026-09-18 구현 완료)
 
-2026-09-17 에 설계만 논의하고 **코드는 전혀 손대지 않았습니다.** 다시 시작할 때 참고할 결론:
+**만든 것**: 수업 페이지의 "강의 녹음" 영역에서 ① 브라우저 녹음 ② 오디오 파일 업로드 ③ 전사문 붙여넣기 → 녹음 상세 화면에서 받아쓰기와 AI 요약.
 
-- Claude API 는 오디오 입력을 못 받으므로 **외부 STT 서비스가 필요**합니다 (비동기 작업 + 웹훅 방식). Claude 는 받아쓰기 결과를 PDF 페이지와 매칭하는 데 사용합니다.
-- 진행 순서 제안: ① 녹음 파일 업로드 → 받아쓰기 ② 페이지 매핑 + 학습 화면 '강의' 탭 + AI 컨텍스트 ③ 학습 화면에서 직접 녹음(페이지 넘긴 시각 기록) ④ 요약 노트
-- 제약: Supabase Free 는 파일당 50MB · 전체 1GB(PDF 와 공유) → Opus 모노 24~32kbps 로 압축하고 받아쓰기 후 원본 삭제 / Vercel 요청 4.5MB · Hobby 300초 → 브라우저에서 Storage 로 직접 업로드 / iOS 는 화면이 숨겨지면 마이크가 멈춤 / 웹훅 라우트는 로그인 세션이 없어 service role 키 필요
-- **미정: STT 서비스 선정** (한국어 정확도, 3시간 파일, URL 입력 + 웹훅, 타임스탬프, 가격 기준으로 비교 필요), 원본 녹음 보관 여부, Pro 플랜 전환 여부
+**받아쓰기는 Deepgram Nova-3** 로 정했습니다(2026-09-18 비교 조사 결과). 무료 크레딧 $200 을 카드 없이 받을 수 있어 3시간 강의 약 250개를 무료로 처리할 수 있고, 한국어가 최신 모델에 정식 지원되며 서명 URL 을 그대로 넘길 수 있어 구조가 단순합니다. 요청에 `mip_opt_out=true` 를 붙여 녹음이 모델 학습에 쓰이지 않게 했습니다.
 
----
+| 다른 후보 | 시간당 | 특징 | 왜 안 골랐나 |
+| --- | --- | --- | --- |
+| Groq (Whisper turbo) | $0.04 | 가장 저렴·빠름 | 무료 한도가 3시간 파일 하나보다 작음, 한국어 정확도 열세 |
+| Daglo | 600원 | URL+콜백, 한/영 혼용 강점 | 음성 3개월 보관, 학습 사용 조항 없음 |
+| RTZR | 1,000원 | 공개 벤치마크 한국어 강의 1위(CER 4.66%), 데이터 정책 최상 | URL 입력·웹훅 모두 없음 → 별도 워커 필요 |
+| Azure batch | $0.18 | 진짜 웹훅, 화자분리 | 셋업이 무겁고 배치는 무료 티어 없음 |
+
+탈락: OpenAI(25MB 상한 + 타임스탬프 모델 2027-02-26 종료), Google STT v2(GCS 전용·웹훅 없음), AssemblyAI(한국어가 구형 모델 + 학습 옵트아웃 유료 전용), ElevenLabs(무료 월 30분), 자체 호스팅 CPU VPS(3시간에 2~6시간).
+
+**아직 안 한 것**
+- 실제 Deepgram 호출 검증 (키가 없어 미확인) — 첫 녹음으로 꼭 확인하세요
+- 받아쓴 내용을 **PDF 슬라이드 페이지와 연결**(원래 구상의 2단계), 학습 화면 안에서 녹음하며 페이지 넘긴 시각 기록(3단계)
+- 정확도 비교: 실제 강의 샘플로 Deepgram vs RTZR vs Daglo 를 직접 재보면 좋습니다. 한국어 벤치마크 수치는 2023년 벤더 자체 측정이라 최신 모델이 빠져 있습니다
+- 녹음 원본 보관·삭제 정책, Supabase Pro 전환 여부
 
 ## 10. 작업 이력
 
@@ -192,4 +220,6 @@ npx eslint src       # 린트
 | 2026-09-17 | — | Supabase 프로젝트에 스키마 적용 · Confirm email 끔 · 비밀번호 최소 8자 · `.env.local` 작성 · 첫 가입 확인 |
 | 2026-09-17 | `e978013` | PDF 뷰어 접근성 개선 (업로드 후 바로 열기, 열기 버튼, 최근 강의자료, PDF 넓게 보기, 좁은 화면 오버레이 패널) |
 | 2026-09-17 | — | 강의 녹음 → 받아쓰기 기능 설계 검토 (코드 변경 없음, §9 참고) |
-| 2026-09-18 | 이 커밋 | 인수인계 문서 작성, "PDF 전체" 모드 용량 한도 수정 (30MB → 22MB) |
+| 2026-09-18 | `c0176eb` | 인수인계 문서 작성, "PDF 전체" 모드 용량 한도 수정 (30MB → 22MB) |
+| 2026-09-18 | — | STT 서비스 11곳 비교 조사 → Deepgram 선정 |
+| 2026-09-18 | 이 커밋 | 강의 녹음 · 받아쓰기(Deepgram) · AI 요약 기능 추가, `recordings` 테이블/버킷 |

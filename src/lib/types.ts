@@ -79,3 +79,28 @@ export const COURSE_COLORS = [
   "#8b5cf6", // violet
   "#64748b", // slate
 ];
+
+export type RecordingSource = "recording" | "upload" | "text";
+export type RecordingStatus = "ready" | "transcribing" | "transcribed" | "failed";
+
+/** 받아쓰기 구간 (Deepgram 문단 단위) */
+export type TranscriptSegment = { start: number; end: number; text: string };
+
+export type Recording = {
+  id: string;
+  user_id: string;
+  course_id: string;
+  document_id: string | null;
+  title: string;
+  source: RecordingSource;
+  status: RecordingStatus;
+  storage_path: string | null;
+  file_size: number | null;
+  duration_seconds: number | null;
+  transcript: string | null;
+  segments: TranscriptSegment[] | null;
+  summary: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};

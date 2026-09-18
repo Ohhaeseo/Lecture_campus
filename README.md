@@ -86,6 +86,25 @@
       </ul>
     </td>
   </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🎙️ 강의 녹음 &amp; 받아쓰기</h3>
+      <ul>
+        <li>브라우저에서 바로 녹음 (일시정지 · 이어서 녹음)</li>
+        <li>가지고 있는 오디오 파일 업로드도 가능</li>
+        <li>한국어 자동 받아쓰기 (Deepgram Nova-3)</li>
+        <li>문단별 <b>타임스탬프를 누르면 그 부분부터 재생</b></li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🧾 AI 요약</h3>
+      <ul>
+        <li>받아쓴 강의를 <b>흐름 · 핵심 개념 · 시험 포인트</b>로 정리</li>
+        <li>녹음 없이 <b>전사문을 붙여넣어</b> 요약만 받기도 가능</li>
+        <li>실시간 스트리밍 · 마크다운 · 수식 지원</li>
+      </ul>
+    </td>
+  </tr>
 </table>
 
 > 💡 **꿀팁** — PDF에서 모르는 문장을 드래그하면 `AI에게 질문` / `메모에 인용` 버튼이 나타나요.
@@ -115,6 +134,7 @@
 | **Database / Auth / Storage** | Supabase (Postgres + RLS, Auth, Storage) |
 | **PDF** | react-pdf (PDF.js) |
 | **AI** | Claude API (`@anthropic-ai/sdk`), 스트리밍 응답 · 프롬프트 캐싱 |
+| **받아쓰기** | Deepgram Nova-3 (한국어, 서명 URL 전달 방식) |
 | **Markdown** | react-markdown, remark-gfm, remark-math, rehype-katex |
 
 <br />
@@ -125,7 +145,8 @@
 
 1. [supabase.com](https://supabase.com) 에서 프로젝트를 만듭니다.
 2. **SQL Editor** 에서 [`supabase/schema.sql`](supabase/schema.sql) 을 통째로 붙여넣고 **Run**
-   → 테이블 5개 + 보안 정책(RLS) + PDF 저장 버킷이 한 번에 만들어져요.
+   → 테이블 6개 + 보안 정책(RLS) + PDF · 녹음 저장 버킷이 한 번에 만들어져요.
+   (예전 버전을 이미 실행한 프로젝트라면 [`supabase/migrations/`](supabase/migrations) 의 최신 파일만 추가로 실행해도 돼요)
 3. **Authentication → Sign In / Providers → Email**
    - ⚠️ **Confirm email 끄기** (아이디로 가입하기 때문에 인증 메일을 받을 곳이 없어요)
    - Minimum password length → `8` (선택)
@@ -144,6 +165,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ✅ | Supabase Publishable key (또는 anon key) |
 | `ANTHROPIC_API_KEY` | AI 사용 시 | [Anthropic Console](https://console.anthropic.com) 에서 발급 |
 | `ANTHROPIC_MODEL` | | 기본 `claude-opus-5`. 비용을 줄이려면 `claude-sonnet-5` |
+| `DEEPGRAM_API_KEY` | 받아쓰기 시 | [Deepgram Console](https://console.deepgram.com) 에서 발급 (가입 시 $200 크레딧, 카드 등록 불필요) |
 | `AUTH_EMAIL_DOMAIN` | | 아이디를 내부 이메일로 바꿀 때 쓰는 도메인 (기본 `users.localtest.me`) |
 
 ### 3️⃣ 실행
@@ -176,8 +198,10 @@ npm run dev
     │   ├── (main)/dashboard       # 내 수업 + 다가오는 일정
     │   ├── (main)/courses/[id]    # 수업 상세 · PDF 업로드
     │   ├── (main)/calendar        # 월간 캘린더
+    │   ├── (main)/recordings/[id] # 🎙️ 녹음 상세 (받아쓰기 · AI 요약)
     │   ├── study/[documentId]     # 📄 PDF 뷰어 + 🤖 AI · 📝 메모 패널
-    │   └── api/ai/chat            # Claude API 스트리밍
+    │   ├── api/ai/chat            # Claude API 스트리밍
+    │   └── api/recordings/*       # 받아쓰기(Deepgram) · 요약(Claude)
     ├── 📂 components              # UI 컴포넌트 (study/ = 학습 화면)
     └── 📂 lib                     # Supabase 클라이언트 · 타입 · 유틸
 ```
@@ -190,6 +214,7 @@ npm run dev
 erDiagram
     USERS ||--o{ COURSES : "만든다"
     COURSES ||--o{ DOCUMENTS : "강의자료"
+    COURSES ||--o{ RECORDINGS : "강의 녹음"
     COURSES ||--o{ EVENTS : "일정"
     DOCUMENTS ||--o{ NOTES : "메모"
     DOCUMENTS ||--o{ CHAT_MESSAGES : "AI 대화"
@@ -222,6 +247,15 @@ erDiagram
         text content
         int page "질문한 쪽"
     }
+    RECORDINGS {
+        uuid id PK
+        uuid course_id FK
+        text title "녹음 제목"
+        text status "ready, transcribing, transcribed, failed"
+        text transcript "받아쓴 전체 내용"
+        jsonb segments "문단별 타임스탬프"
+        text summary "AI 요약"
+    }
     EVENTS {
         uuid id PK
         uuid course_id FK "null = 개인 일정"
@@ -232,7 +266,7 @@ erDiagram
 ```
 
 - 🔒 모든 테이블에 **RLS(Row Level Security)** 가 적용되어 **본인 데이터만** 읽고 쓸 수 있어요.
-- 📁 PDF 파일은 비공개 Storage 버킷의 `{user_id}/{course_id}/{document_id}.pdf` 에 저장돼요.
+- 📁 PDF 와 녹음 파일은 각각 비공개 Storage 버킷(`documents`, `recordings`)의 `{user_id}/{course_id}/…` 에 저장돼요.
 - 🧹 수업을 지우면 자료 · 메모 · 대화 · 일정과 **Storage 파일까지** 함께 정리돼요.
 
 <br />
@@ -325,7 +359,8 @@ PDF 파일, 메모, 일정, 회원 관리를 **하나의 서비스로** 해결�
 - [x] AI 질문 (현재 페이지 / PDF 전체)
 - [x] 텍스트 선택 → AI 질문 · 메모 인용
 - [x] 캘린더 · D-day
-- [ ] 🎙️ 강의 녹음 업로드 → 받아쓰기 → 슬라이드와 연결
+- [x] 🎙️ 강의 녹음 · 받아쓰기 · AI 요약
+- [ ] 🔗 받아쓴 내용을 PDF 슬라이드 페이지와 연결
 - [ ] 🧾 자료 업로드 시 요약 노트 자동 생성
 - [ ] 🃏 시험 대비 퀴즈 · 플래시카드
 - [ ] ✅ 시험 범위 체크리스트와 진도율

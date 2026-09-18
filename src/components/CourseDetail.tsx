@@ -8,9 +8,10 @@ import { deleteCourse, deleteDocument } from "@/lib/courses";
 import { formatFileSize, formatTimestamp } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/client";
 import { DOCUMENTS_BUCKET } from "@/lib/supabase/env";
-import type { CalendarEvent, Course, DocumentRow } from "@/lib/types";
+import type { CalendarEvent, Course, DocumentRow, Recording } from "@/lib/types";
 import { CourseDialog } from "./CourseDialog";
 import { EventDialog } from "./EventDialog";
+import { RecordingList } from "./recordings/RecordingList";
 import { UpcomingEvents } from "./UpcomingEvents";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // Supabase 무료 플랜 업로드 한도
@@ -23,12 +24,14 @@ export function CourseDetail({
   documents,
   events,
   courses,
+  recordings,
 }: {
   userId: string;
   course: Course;
   documents: DocumentRow[];
   events: CalendarEvent[];
   courses: Course[];
+  recordings: Recording[];
 }) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -309,6 +312,10 @@ export function CourseDetail({
                 ))}
               </ul>
             )}
+          </div>
+
+          <div className="mt-8">
+            <RecordingList userId={userId} courseId={course.id} recordings={recordings} />
           </div>
         </section>
 

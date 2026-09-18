@@ -10,3 +10,6 @@ export function isSupabaseConfigured() {
 
 /** PDF 파일이 저장되는 Storage 버킷 이름 (supabase/schema.sql 과 동일해야 함) */
 export const DOCUMENTS_BUCKET = "documents";
+
+/** 녹음 파일이 저장되는 Storage 버킷 */
+export const RECORDINGS_BUCKET = "recordings";

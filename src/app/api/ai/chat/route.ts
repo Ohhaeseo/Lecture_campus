@@ -1,13 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  ANTHROPIC_MODEL,
+  describeAnthropicError,
+  fallbackOptions,
+  jsonError,
+  ndjsonChunk,
+  NDJSON_HEADERS,
+} from "@/lib/anthropic";
 import { createClient } from "@/lib/supabase/server";
 import { DOCUMENTS_BUCKET } from "@/lib/supabase/env";
 
 // 긴 답변 스트리밍을 위해 실행 시간을 넉넉히 (Vercel 등 배포 환경에서 적용)
 export const maxDuration = 300;
-
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
-// 안전 분류기에 걸린 요청을 다른 모델로 자동 재시도하는 서버 측 fallback (지원 모델에서만 사용)
-const MODELS_WITH_DEFAULT_FALLBACK = new Set(["claude-opus-5", "claude-fable-5-1"]);
 
 const MAX_HISTORY = 20;
 // base64 로 바꾸면 용량이 약 1.33배가 되므로, 22MB 까지만 허용해야 API 요청 한도(32MB) 안에 들어간다
@@ -113,21 +117,18 @@ export async function POST(request: Request) {
   const client = new Anthropic();
   const stream = client.beta.messages.stream(
     {
-      model: MODEL,
+      model: ANTHROPIC_MODEL,
       max_tokens: 64000,
       system: buildSystemPrompt(doc),
       messages,
-      ...(MODELS_WITH_DEFAULT_FALLBACK.has(MODEL)
-        ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
-        : {}),
+      ...fallbackOptions(),
     },
     { signal: request.signal },
   );
 
-  const encoder = new TextEncoder();
   const responseBody = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (event: object) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      const send = (event: object) => controller.enqueue(ndjsonChunk(event));
       let answer = "";
 
       stream.on("text", (delta) => {
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
           if (answer) await saveAnswer(`${answer}\n\n_(답변을 중단했어요)_`);
         } else {
           console.error("[ai/chat]", err);
-          send({ type: "error", message: describeError(err) });
+          send({ type: "error", message: describeAnthropicError(err) });
         }
       } finally {
         try {
@@ -178,12 +179,7 @@ export async function POST(request: Request) {
     });
   }
 
-  return new Response(responseBody, {
-    headers: {
-      "Content-Type": "application/x-ndjson; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-    },
-  });
+  return new Response(responseBody, { headers: NDJSON_HEADERS });
 }
 
 function buildSystemPrompt(doc: DocumentWithCourse) {
@@ -239,18 +235,4 @@ function parseBody(raw: unknown): ChatRequest {
       : null;
   const pageText = typeof b.pageText === "string" ? b.pageText.slice(0, 20000) : undefined;
   return { documentId: b.documentId, message: b.message.trim(), page, scope: b.scope, pageText, pageImage };
-}
-
-function describeError(err: unknown) {
-  if (err instanceof Anthropic.AuthenticationError) return "Anthropic API 키가 올바르지 않아요.";
-  if (err instanceof Anthropic.PermissionDeniedError) return "이 API 키로는 해당 모델을 사용할 수 없어요.";
-  if (err instanceof Anthropic.RateLimitError) return "AI 요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
-  if (err instanceof Anthropic.BadRequestError) return `AI 요청이 거절됐어요: ${err.message}`;
-  if (err instanceof Anthropic.APIConnectionError) return "AI 서버에 연결하지 못했어요.";
-  if (err instanceof Anthropic.APIError) return `AI 서버 오류가 발생했어요. (${err.status ?? "?"})`;
-  return "답변을 만드는 중 오류가 발생했어요.";
-}
-
-function jsonError(status: number, error: string) {
-  return Response.json({ error }, { status });
 }
