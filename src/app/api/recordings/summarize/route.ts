@@ -8,6 +8,7 @@ import {
   truncatedNote,
 } from "@/lib/ai";
 import { formatDuration } from "@/lib/recordings";
+import { buildSummaryInstructions } from "@/lib/summaryTemplate";
 import { createClient } from "@/lib/supabase/server";
 import type { Recording, TranscriptSegment } from "@/lib/types";
 
@@ -45,11 +46,11 @@ export async function POST(request: Request) {
   const stream = client.responses.stream(
     {
       model: OPENAI_MODEL,
-      instructions: SYSTEM_PROMPT,
+      instructions: buildSummaryInstructions(),
       input: [
         {
           role: "user",
-          content: `수업: ${recording.course?.name ?? "(알 수 없음)"}\n녹음 제목: ${recording.title}\n\n<transcript>\n${buildTranscript(recording)}\n</transcript>\n\n위 강의 녹음을 정리해 주세요.`,
+          content: `수업: ${recording.course?.name ?? "(알 수 없음)"}\n제목: ${recording.title}\n\n<transcript>\n${buildTranscript(recording)}\n</transcript>\n\n위 강의 전사문을 정해진 틀에 맞춰 정리해 주세요.`,
         },
       ],
       max_output_tokens: MAX_OUTPUT_TOKENS,
@@ -108,25 +109,6 @@ export async function POST(request: Request) {
 
   return new Response(responseBody, { headers: NDJSON_HEADERS });
 }
-
-const SYSTEM_PROMPT = `당신은 대학생의 강의 녹음을 정리해 주는 학습 도우미입니다.
-받아쓰기(자동 음성 인식) 결과를 읽고, 수업을 놓친 학생이 이것만 봐도 따라갈 수 있게 한국어 마크다운으로 정리하세요.
-
-다음 순서로 작성합니다.
-## 한 줄 요약
-## 강의 흐름
-주제별로 나눠 설명하고, 받아쓰기에 [시:분:초] 표시가 있으면 각 주제 끝에 (00:12:34) 형태로 시작 시각을 적으세요.
-## 핵심 개념
-용어와 정의를 목록으로 정리합니다.
-## 시험에 나올 만한 부분
-교수님이 강조하거나 반복한 내용, 시험·과제를 언급한 부분. 해당 내용이 없으면 이 절은 생략하세요.
-## 다시 확인할 점
-받아쓰기가 흐릿해 확실하지 않은 부분이나, 자료를 더 봐야 하는 부분.
-
-규칙:
-- 받아쓰기 오류로 보이는 단어는 문맥으로 고쳐서 이해하되, 확신이 없으면 원문 뒤에 (?) 를 붙이세요.
-- 녹음에 없는 내용을 지어내지 마세요. 잡담이나 공지는 짧게만 언급하세요.
-- 수식은 인라인 $...$, 블록 $$...$$ 로 감싸세요.`;
 
 /** 타임스탬프가 있으면 [시:분:초] 를 붙여서 모델이 시각을 인용할 수 있게 한다 */
 function buildTranscript(recording: RecordingRow) {

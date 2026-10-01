@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, FileText, LoaderCircle, Pencil, Plus, Trash, Upload, X } from "lucide-react";
+import { BookOpen, Check, FileText, LoaderCircle, Pencil, Plus, Sparkles, Trash, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -137,6 +137,9 @@ export function CourseDetail({
           </div>
         </div>
         <div className="flex gap-2">
+          <Link href={`/courses/${course.id}/summary`} className="btn btn-primary">
+            <Sparkles size={15} /> AI 수업 요약
+          </Link>
           <button type="button" className="btn btn-secondary" onClick={() => setEditingCourse(true)}>
             <Pencil size={15} /> 수정
           </button>

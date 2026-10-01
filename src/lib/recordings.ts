@@ -106,3 +106,41 @@ export async function deleteRecording(
   const { error } = await supabase.from("recordings").delete().eq("id", recording.id);
   return error?.message ?? null;
 }
+
+/**
+ * 요약 API 를 호출하고, 스트리밍으로 오는 글자를 onText 로 넘긴다.
+ * 서버가 한 줄에 JSON 하나씩(NDJSON) 보낸다. 실패하면 Error 를 던진다.
+ */
+export async function streamRecordingSummary(
+  recordingId: string,
+  onText: (text: string) => void,
+  signal?: AbortSignal,
+) {
+  const res = await fetch("/api/recordings/summarize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recordingId }),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? `요약에 실패했어요. (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = JSON.parse(line) as { type: string; text?: string; message?: string };
+      if (event.type === "text" && event.text) onText(event.text);
+      else if (event.type === "error") throw new Error(event.message);
+    }
+  }
+}

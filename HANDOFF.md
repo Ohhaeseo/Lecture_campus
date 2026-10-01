@@ -96,6 +96,7 @@ npx eslint src       # 린트
 | `/calendar` | `src/app/(main)/calendar/page.tsx` → `components/CalendarView.tsx` | 월간 캘린더 |
 | `/study/[documentId]` | `src/app/study/[documentId]/page.tsx` → `components/study/StudyView.tsx` | PDF 뷰어 + AI/메모 패널 (사이드바 없는 전체 화면) |
 | `POST /api/ai/chat` | `src/app/api/ai/chat/route.ts` | OpenAI Responses 스트리밍 (NDJSON 응답) |
+| `/courses/[courseId]/summary` | `src/app/(main)/courses/[courseId]/summary/page.tsx` → `components/recordings/SummaryStudio.tsx` | 전사문 붙여넣기 → 고정 틀로 AI 수업 요약 (PDF·오디오 불필요, `recordings` 에 `source: text` 로 저장) |
 | `/recordings/[id]` | `src/app/(main)/recordings/[recordingId]/page.tsx` → `components/recordings/RecordingDetail.tsx` | 녹음 재생 · 받아쓰기 · AI 요약 |
 | `POST /api/recordings/transcribe` | `src/app/api/recordings/transcribe/route.ts` | Deepgram 호출 (동기, 결과를 DB 에 저장) |
 | `POST /api/recordings/summarize` | `src/app/api/recordings/summarize/route.ts` | 받아쓰기 → OpenAI 요약 (NDJSON 스트리밍) |
@@ -134,6 +135,7 @@ npx eslint src       # 린트
   - 브라우저가 소리만 따로 주는 API 가 없어 컴퓨터 소리는 화면 공유 창을 거칩니다. 사용자가 "시스템 오디오 공유" 를 체크하지 않으면 오디오 트랙이 없어 안내 문구를 띄웁니다
 - 받아쓰기: 서버가 6시간짜리 서명 URL 을 만들어 **Deepgram 에 URL 만 전달**(오디오를 서버로 내려받지 않음) → 결과를 `transcript` / `segments` 에 저장
   - **웹훅이 아니라 동기 호출**입니다. 로컬 개발에서 웹훅을 받을 수 없어 단순한 쪽을 택했고, 요청 타임아웃은 240초입니다
+- 요약 틀: `src/lib/summaryTemplate.ts` 의 `SUMMARY_SECTIONS` 8개 절(개요 · 한눈에 보기 · 상세 정리 · 핵심 개념 · 시험 포인트 · 과제/공지 · 복습 질문 · 다시 확인할 점)이 화면 미리보기와 AI 지시문에 같이 쓰입니다. 절을 바꾸려면 이 파일만 고치면 됩니다
 - 요약: `segments` 가 있으면 [시:분:초] 를 붙여 OpenAI 에 보내고, 스트리밍으로 받아 `summary` 에 저장. 긴 입력을 캐시에 쓰지 않도록 `prompt_cache_options: { mode: "explicit" }` 사용
 
 ---
@@ -230,3 +232,4 @@ npx eslint src       # 린트
 | 2026-09-18 | `dbf89b1` | 강의 녹음 · 받아쓰기(Deepgram) · AI 요약 기능 추가, `recordings` 테이블/버킷 |
 | 2026-09-18 | `736342e` | AI 제공자를 Claude → OpenAI Responses API 로 교체 |
 | 2026-09-18 | 이 커밋 | recordings 마이그레이션 적용, OpenAI 연동 실제 동작 확인, 버튼 설명 보완 |
+| 2026-10-01 | — | AI 수업 요약 화면(`/courses/[id]/summary`) 추가, 요약을 8개 절 고정 틀로 변경, 전사문 붙여넣기 모달(`TranscriptDialog`) 제거. **화면은 목업으로만 확인, 새 틀로 실제 OpenAI 호출은 미확인** |

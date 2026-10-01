@@ -1,6 +1,6 @@
 "use client";
 
-import { AudioLines, ClipboardPaste, LoaderCircle, Mic, Trash, Upload, X } from "lucide-react";
+import { AudioLines, LoaderCircle, Mic, Sparkles, Trash, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -9,7 +9,6 @@ import { deleteRecording, formatDuration, MAX_RECORDING_BYTES, saveRecording } f
 import { createClient } from "@/lib/supabase/client";
 import type { Recording, RecordingStatus } from "@/lib/types";
 import { RecorderDialog } from "./RecorderDialog";
-import { TranscriptDialog } from "./TranscriptDialog";
 
 const STATUS: Record<RecordingStatus, { label: string; className: string }> = {
   ready: { label: "받아쓰기 전", className: "bg-zinc-100 text-zinc-600" },
@@ -30,7 +29,6 @@ export function RecordingList({
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
   const [recorderOpen, setRecorderOpen] = useState(false);
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -84,15 +82,14 @@ export function RecordingList({
           >
             <Upload size={15} /> <span className="hidden sm:inline">오디오 올리기</span>
           </button>
-          <button
-            type="button"
+          <Link
+            href={`/courses/${courseId}/summary`}
             className="btn btn-secondary"
-            onClick={() => setTranscriptOpen(true)}
-            title="이미 받아쓴 강의 내용을 붙여넣어 요약만 받기"
-            aria-label="전사문 붙여넣기"
+            title="이미 받아쓴 전사문을 붙여넣어 요약만 받기"
+            aria-label="전사문으로 요약"
           >
-            <ClipboardPaste size={15} /> <span className="hidden sm:inline">붙여넣기</span>
-          </button>
+            <Sparkles size={15} /> <span className="hidden sm:inline">전사문 요약</span>
+          </Link>
           <input
             ref={fileInput}
             type="file"
@@ -182,7 +179,6 @@ export function RecordingList({
         userId={userId}
         courseId={courseId}
       />
-      <TranscriptDialog open={transcriptOpen} onClose={() => setTranscriptOpen(false)} courseId={courseId} />
     </>
   );
 }

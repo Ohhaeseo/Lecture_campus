@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { formatFileSize, formatTimestamp } from "@/lib/dates";
-import { deleteRecording, formatDuration } from "@/lib/recordings";
+import { deleteRecording, formatDuration, streamRecordingSummary } from "@/lib/recordings";
 import { createClient } from "@/lib/supabase/client";
 import type { Course, Recording } from "@/lib/types";
 import { Markdown } from "../Markdown";
@@ -59,33 +59,7 @@ export function RecordingDetail({
     setError("");
     setTab("summary");
     try {
-      const res = await fetch("/api/recordings/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recordingId: recording.id }),
-      });
-      if (!res.ok || !res.body) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error ?? `요약에 실패했어요. (${res.status})`);
-      }
-
-      // 서버가 한 줄에 JSON 하나씩(NDJSON) 보낸다
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const event = JSON.parse(line) as { type: string; text?: string; message?: string };
-          if (event.type === "text" && event.text) setSummary((prev) => prev + event.text);
-          else if (event.type === "error") throw new Error(event.message);
-        }
-      }
+      await streamRecordingSummary(recording.id, (text) => setSummary((prev) => prev + text));
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "요약에 실패했어요.");
@@ -207,7 +181,7 @@ export function RecordingDetail({
             ) : (
               <p className="py-10 text-center text-sm leading-6 text-zinc-400">
                 {hasTranscript
-                  ? "위의 'AI 요약 만들기' 를 누르면 강의 흐름, 핵심 개념, 시험 포인트를 정리해 줘요."
+                  ? "위의 'AI 요약 만들기' 를 누르면 정해진 틀(개요 · 상세 정리 · 핵심 개념 · 시험 포인트 · 복습 질문)로 정리해 줘요."
                   : "먼저 받아쓰기를 끝내면 AI 요약을 만들 수 있어요."}
               </p>
             )
