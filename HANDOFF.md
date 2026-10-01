@@ -130,6 +130,8 @@ npx eslint src       # 린트
 
 ### 녹음 · 받아쓰기 · 요약 흐름
 - 녹음: 브라우저 MediaRecorder(모노 32kbps) → Blob → **브라우저에서 Storage 로 직접 업로드** → `recordings` insert. 화면 잠금 방지(wake lock)와 50MB 도달 시 자동 종료가 들어 있음
+  - 입력은 3가지: **마이크**(`getUserMedia`, 장치 선택 가능) / **컴퓨터 소리**(`getDisplayMedia` 로 받은 오디오 트랙만 사용, 영상은 저장하지 않음) / **둘 다**(Web Audio `MediaStreamDestination` 으로 합침)
+  - 브라우저가 소리만 따로 주는 API 가 없어 컴퓨터 소리는 화면 공유 창을 거칩니다. 사용자가 "시스템 오디오 공유" 를 체크하지 않으면 오디오 트랙이 없어 안내 문구를 띄웁니다
 - 받아쓰기: 서버가 6시간짜리 서명 URL 을 만들어 **Deepgram 에 URL 만 전달**(오디오를 서버로 내려받지 않음) → 결과를 `transcript` / `segments` 에 저장
   - **웹훅이 아니라 동기 호출**입니다. 로컬 개발에서 웹훅을 받을 수 없어 단순한 쪽을 택했고, 요청 타임아웃은 240초입니다
 - 요약: `segments` 가 있으면 [시:분:초] 를 붙여 OpenAI 에 보내고, 스트리밍으로 받아 `summary` 에 저장. 긴 입력을 캐시에 쓰지 않도록 `prompt_cache_options: { mode: "explicit" }` 사용
